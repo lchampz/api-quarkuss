@@ -12,21 +12,20 @@ import java.util.UUID;
 @ApplicationScoped
 public class AlunoRepository implements PanacheRepository<Aluno> {
 
-    public Aluno findById(UUID id) {
+    public Aluno findById(Long id) {
         return find("id", id).firstResult();
     }
-
 
     public List<Aluno> findByEscola(Escola escola) {
         return find("escola", escola).list();
     }
 
     public Aluno addAluno(Aluno aluno) {
-        persist(aluno);
+        persistAndFlush(aluno);
         return aluno;
     }
 
-    public Aluno removeFromId(UUID id) {
+    public Aluno removeFromId(Long id) {
         Aluno aluno = this.findById(id);
         aluno.delete();
         return aluno;

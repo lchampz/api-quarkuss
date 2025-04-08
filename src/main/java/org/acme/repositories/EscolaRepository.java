@@ -20,7 +20,7 @@ public class EscolaRepository implements PanacheRepository<Escola> {
     }
 
     public Escola addEscola(Escola escola) {
-        persist(escola);
+        persistAndFlush(escola);
         return escola;
     }
 

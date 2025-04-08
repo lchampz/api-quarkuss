@@ -1,5 +1,6 @@
 package org.acme.entities;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import io.quarkus.hibernate.orm.panache.PanacheEntity;
 import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
 import jakarta.annotation.Nullable;
@@ -11,22 +12,18 @@ import java.util.UUID;
 
 @Entity
 public class Aluno extends PanacheEntity {
-
-
     public Aluno() {
     }
-
-    @Column
-    public UUID matricula;
     @Column
     public String nome;
-    @ManyToOne
-    public Escola escola;
+    @Nullable
+    @JsonIgnore
+    @OneToMany(mappedBy = "aluno")
+    private List<Matricula> matricula;
 
-    public Aluno(String nome, Escola escola) {
-        matricula = UUID.randomUUID();
+    public Aluno(String nome, @Nullable List<Matricula> matricula) {
         this.nome = nome;
-        this.escola = escola;
+        this.matricula = matricula;
     }
 
     public String getNome() {
@@ -37,12 +34,13 @@ public class Aluno extends PanacheEntity {
         this.nome = nome;
     }
 
-    public Escola getEscola() {
-        return escola;
+    @Nullable
+    public List<Matricula> getMatricula() {
+        return matricula;
     }
 
-    public void setEscola(Escola escola) {
-        this.escola = escola;
-        matricula = UUID.randomUUID();
+    public void setMatricula(@Nullable List<Matricula> matricula) {
+        this.matricula = matricula;
     }
+
 }

@@ -1,5 +1,6 @@
 package org.acme.entities;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import io.quarkus.hibernate.orm.panache.PanacheEntity;
 import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
 import jakarta.annotation.Nullable;
@@ -16,11 +17,29 @@ import java.util.UUID;
 public class Escola extends PanacheEntity {
     @Column
     public String nome;
+    @Column
+    public int capacidade;
     @Nullable
     @OneToMany(mappedBy = "escola")
-    public List<Aluno> alunos;
+    @JsonIgnore
+    private List<Matricula> matricula;
 
     public Escola() {
+    }
+
+
+    public int getCapacidade() {
+        return capacidade;
+    }
+
+    public void setCapacidade(int capacidade) {
+        this.capacidade = capacidade;
+    }
+
+    public Escola(String nome, int capacidade, @Nullable List<Matricula> matricula) {
+        this.nome = nome;
+        this.capacidade = capacidade;
+        this.matricula = matricula == null ? Collections.emptyList() : matricula;
     }
 
     public String getNome() {
@@ -32,22 +51,22 @@ public class Escola extends PanacheEntity {
     }
 
     @Nullable
-    public List<Aluno> getAlunos() {
-        return alunos;
+    public List<Matricula> getMatricula() {
+        return matricula;
     }
 
-    public void setAlunos(@Nullable List<Aluno> alunos) {
-        this.alunos = alunos;
+    public void setMatriculas(@Nullable List<Matricula> matricula) {
+        this.matricula = matricula;
     }
 
-    public Escola(String nome, List<Aluno> alunos) {
+    public Escola(String nome, List<Matricula> matricula) {
         this.nome = nome;
-        this.alunos = alunos.isEmpty() ? Collections.emptyList() : alunos;
+        this.matricula = matricula.isEmpty() ? Collections.emptyList() : matricula;
     }
 
     public Escola(String nome) {
         this.nome = nome;
-        alunos = Collections.emptyList();
+        matricula = Collections.emptyList();
     }
 
 
