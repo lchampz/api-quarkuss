@@ -7,8 +7,10 @@ import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.acme.DTO.InsertMatriculaDTO;
+import org.acme.entities.Aluno;
 import org.acme.entities.Escola;
 import org.acme.entities.Matricula;
+import org.acme.repositories.AlunoRepository;
 import org.acme.repositories.EscolaRepository;
 import org.acme.repositories.MatriculaRepository;
 
@@ -29,6 +31,9 @@ public class MatriculaController {
     @Inject
     EscolaRepository escolaRepository;
 
+    @Inject
+    AlunoRepository alunoRepository;
+
     private void logRequest(String endpoint) {
         Log.info("[" + java.time.LocalDateTime.now() + "] Endpoint acessado: " + endpoint);
     }
@@ -47,13 +52,17 @@ public class MatriculaController {
     public Response addMatricula(InsertMatriculaDTO item) throws Exception {
         logRequest("/matriculas");
         Escola escola = escolaRepository.findById(item.escola);
+        Aluno aluno = alunoRepository.findById(item.aluno);
         if (escola == null) {
             return Response.status(Response.Status.NOT_FOUND).entity("Escola não encontrada.").build();
+        }
+        if (aluno == null) {
+            return Response.status(Response.Status.NOT_FOUND).entity("Aluno não encontrada.").build();
         }
         if (escola.capacidade <= matriculaRepository.countByEscola(escola)) {
             return Response.status(Response.Status.BAD_REQUEST).entity("A escola está lotada.").build();
         }
-        Matricula matricula = new Matricula(item.curso, escola, null);
+        Matricula matricula = new Matricula(item.curso, escola, aluno);
         matriculaRepository.persist(matricula);
         return Response.status(Response.Status.CREATED).entity(item).build();
     }
