@@ -14,12 +14,12 @@ import org.acme.entities.Matricula;
 import org.acme.exceptions.ApiError;
 import org.acme.repositories.AlunoRepository;
 import org.acme.repositories.MatriculaRepository;
-import org.acme.interceptors.Idempotent;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 import java.util.HashMap;
+import java.util.stream.Collectors;
 
 import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.enums.SecuritySchemeIn;
@@ -31,6 +31,7 @@ import org.eclipse.microprofile.openapi.annotations.media.Content;
 import org.eclipse.microprofile.openapi.annotations.media.Schema;
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponses;
+import org.acme.interceptors.Idempotent; // Certifique-se de que este interceptor está no seu projeto
 
 @Path("v1/alunos")
 @Produces(MediaType.APPLICATION_JSON)
@@ -46,7 +47,7 @@ public class AlunoController {
     MatriculaRepository matriculaRepository;
 
     private void logRequest(String endpoint) {
-        Log.info("[" + java.time.LocalDateTime.now() + "] Endpoint acessado: " + endpoint);
+        Log.info("[" + LocalDateTime.now() + "] Endpoint acessado: " + endpoint);
     }
 
     @GET
@@ -68,7 +69,7 @@ public class AlunoController {
     @GET
     @Path("/search")
     @SecurityRequirement(name = "apiKey")
-    @Operation(summary = "Busca alunos", description = "Busca alunos com base em critérios específicos (nome, idade, escola).")
+    @Operation(summary = "Busca alunos", description = "Busca alunos com base em critérios específicos (nome, idade). A busca por escola é feita via matrículas.")
     @APIResponses(value = {
             @APIResponse(responseCode = "200", description = "Busca realizada com sucesso",
                     content = @Content(mediaType = MediaType.APPLICATION_JSON,
@@ -79,13 +80,12 @@ public class AlunoController {
     public Response searchAlunos(
             @QueryParam("nome") String nome,
             @QueryParam("idadeMin") Integer idadeMin,
-            @QueryParam("idadeMax") Integer idadeMax,
-            @QueryParam("escolaId") Long escolaId) {
+            @QueryParam("idadeMax") Integer idadeMax, Long escolaId) { // Removido escolaId como QueryParam
         logRequest("/alunos/search");
         try {
             List<Aluno> alunos = Aluno.listAll();
 
-            return alunos.stream()
+            List<Map<String, Object>> result = alunos.stream()
                     .filter(aluno -> {
                         // Filtro por nome (case insensitive)
                         boolean matchNome = nome == null || nome.isEmpty() ||
@@ -99,11 +99,7 @@ public class AlunoController {
                         boolean matchIdadeMax = idadeMax == null ||
                                 aluno.getIdade() <= idadeMax;
 
-                        // Filtro por escola
-                        boolean matchEscola = escolaId == null ||
-                                (aluno.getEscola() != null && aluno.getEscola().id.equals(escolaId));
-
-                        return matchNome && matchIdadeMin && matchIdadeMax && matchEscola;
+                        return matchNome && matchIdadeMin && matchIdadeMax;
                     })
                     .map(aluno -> {
                         Map<String, Object> map = new HashMap<>();
@@ -117,16 +113,15 @@ public class AlunoController {
                         map.put("endereco", aluno.getEndereco());
                         map.put("observacoes", aluno.getObservacoes());
                         map.put("ativo", aluno.getAtivo());
-                        map.put("escolaId", aluno.getEscola() != null ? aluno.getEscola().id : null);
-                        map.put("escolaNome", aluno.getEscola() != null ? aluno.getEscola().getNome() : null);
+                        // Não há mais escolaId ou escolaNome diretamente no Aluno
                         return map;
                     })
-                    .collect(Collectors.collectingAndThen(
-                            Collectors.toList(),
-                            list -> Response.ok(list).build()
-                    ));
+                    .collect(Collectors.toList());
+
+            return Response.ok(result).build();
 
         } catch (Exception e) {
+            Log.error("Erro ao buscar alunos: " + e.getMessage(), e);
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
                     .entity("Erro ao buscar alunos: " + e.getMessage())
                     .build();
@@ -137,7 +132,7 @@ public class AlunoController {
     @Transactional
     @Idempotent
     @SecurityRequirement(name = "apiKey")
-    @Operation(summary = "Adiciona um aluno", description = "Adiciona um novo aluno ao sistema.")
+    @Operation(summary = "Adiciona um aluno", description = "Adiciona um novo aluno ao sistema. A associação com a escola é feita através de matrícula.")
     @APIResponses(value = {
             @APIResponse(responseCode = "201", description = "Aluno criado com sucesso",
                     content = @Content(mediaType = MediaType.APPLICATION_JSON,
@@ -148,11 +143,22 @@ public class AlunoController {
     })
     public Response addAluno(@Valid InsertAlunoDTO dto) {
         logRequest("/alunos");
+
         Aluno aluno = new Aluno();
         aluno.setNome(dto.getNome());
         aluno.setIdade(dto.getIdade());
+        aluno.setDataNascimento(dto.getDataNascimento());
+        aluno.setNomeResponsavel(dto.getNomeResponsavel());
+        aluno.setTelefoneResponsavel(dto.getTelefoneResponsavel());
+        aluno.setEmailResponsavel(dto.getEmailResponsavel());
+        aluno.setEndereco(dto.getEndereco());
+        aluno.setObservacoes(dto.getObservacoes());
         aluno.setAtivo(dto.getAtivo() != null ? dto.getAtivo() : true);
+        aluno.setDataCriacao(LocalDateTime.now());
+        aluno.setDataAtualizacao(null);
+        // Não há mais setEscola() diretamente no Aluno
         alunoRepository.persist(aluno);
+
         return Response.status(Response.Status.CREATED).entity(aluno).build();
     }
 
@@ -181,9 +187,16 @@ public class AlunoController {
         }
         aluno.setNome(dto.getNome());
         aluno.setIdade(dto.getIdade());
+        aluno.setDataNascimento(dto.getDataNascimento());
+        aluno.setNomeResponsavel(dto.getNomeResponsavel());
+        aluno.setTelefoneResponsavel(dto.getTelefoneResponsavel());
+        aluno.setEmailResponsavel(dto.getEmailResponsavel());
+        aluno.setEndereco(dto.getEndereco());
+        aluno.setObservacoes(dto.getObservacoes());
         if (dto.getAtivo() != null) {
             aluno.setAtivo(dto.getAtivo());
         }
+        aluno.setDataAtualizacao(LocalDateTime.now());
         alunoRepository.persist(aluno);
         return Response.ok(aluno).build();
     }
@@ -193,7 +206,7 @@ public class AlunoController {
     @Transactional
     @Idempotent
     @SecurityRequirement(name = "apiKey")
-    @Operation(summary = "Remove um aluno", description = "Remove um aluno existente do sistema.")
+    @Operation(summary = "Remove um aluno", description = "Remove um aluno existente do sistema e suas matrículas associadas.")
     @APIResponses(value = {
             @APIResponse(responseCode = "204", description = "Aluno excluído com sucesso"),
             @APIResponse(responseCode = "404", description = "Aluno não encontrado"),
@@ -208,6 +221,8 @@ public class AlunoController {
                     .entity(new ApiError(404, "Not Found", "Aluno não encontrado", "/alunos/" + id))
                     .build();
         }
+        // Deletar matrículas associadas antes de deletar o aluno
+        matriculaRepository.delete("aluno", aluno);
         alunoRepository.delete(aluno);
         return Response.noContent().build();
     }
@@ -258,6 +273,7 @@ public class AlunoController {
                     .build();
         }
         aluno.setAtivo(dto.getAtivo());
+        aluno.setDataAtualizacao(LocalDateTime.now());
         alunoRepository.persist(aluno);
         return Response.ok(aluno).build();
     }
@@ -284,7 +300,7 @@ public class AlunoController {
     @GET
     @Path("/media-idade")
     @SecurityRequirement(name = "apiKey")
-    @Operation(summary = "Calcula a média de idade dos alunos", description = "Calcula a média de idade dos alunos cadastrados no sistema.")
+    @Operation(summary = "Calcula a média de idade dos alunos por escola", description = "Calcula a média de idade dos alunos cadastrados no sistema, agrupados por escola via matrículas.")
     @APIResponses(value = {
             @APIResponse(responseCode = "200", description = "Média de idade calculada com sucesso",
                     content = @Content(mediaType = MediaType.APPLICATION_JSON,
@@ -294,12 +310,13 @@ public class AlunoController {
     })
     public Response getMediaIdadeAlunos() {
         logRequest("/alunos/media-idade");
-        List<Aluno> alunos = alunoRepository.listAll();
-        Map<Long, Double> mediaPorEscola = alunos.stream()
-                .filter(a -> a.getEscola() != null)
+        List<Matricula> matriculas = matriculaRepository.listAll();
+
+        Map<Long, Double> mediaPorEscola = matriculas.stream()
+                .filter(m -> m.getAluno() != null && m.getEscola() != null)
                 .collect(Collectors.groupingBy(
-                        a -> a.getEscola().id,
-                        Collectors.averagingDouble(Aluno::getIdade)
+                        m -> m.getEscola().id,
+                        Collectors.averagingDouble(m -> m.getAluno().getIdade())
                 ));
         return Response.ok(mediaPorEscola).build();
     }
@@ -309,7 +326,7 @@ public class AlunoController {
     @Transactional
     @Idempotent
     @SecurityRequirement(name = "apiKey")
-    @Operation(summary = "Adiciona um lote de alunos", description = "Adiciona um lote de alunos ao sistema.")
+    @Operation(summary = "Adiciona um lote de alunos", description = "Adiciona um lote de alunos ao sistema. A associação com a escola é feita através de matrícula.")
     @APIResponses(value = {
             @APIResponse(responseCode = "201", description = "Lote de alunos criado com sucesso",
                     content = @Content(mediaType = MediaType.APPLICATION_JSON,
@@ -325,7 +342,15 @@ public class AlunoController {
                     Aluno aluno = new Aluno();
                     aluno.setNome(dto.getNome());
                     aluno.setIdade(dto.getIdade());
+                    aluno.setDataNascimento(dto.getDataNascimento());
+                    aluno.setNomeResponsavel(dto.getNomeResponsavel());
+                    aluno.setTelefoneResponsavel(dto.getTelefoneResponsavel());
+                    aluno.setEmailResponsavel(dto.getEmailResponsavel());
+                    aluno.setEndereco(dto.getEndereco());
+                    aluno.setObservacoes(dto.getObservacoes());
                     aluno.setAtivo(dto.getAtivo() != null ? dto.getAtivo() : true);
+                    aluno.setDataCriacao(LocalDateTime.now());
+                    aluno.setDataAtualizacao(null);
                     return aluno;
                 })
                 .collect(Collectors.toList());

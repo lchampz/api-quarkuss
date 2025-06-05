@@ -2,15 +2,8 @@ package org.acme.entities;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import io.quarkus.hibernate.orm.panache.PanacheEntity;
-import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
 import jakarta.annotation.Nullable;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.Id;
-import jakarta.persistence.OneToMany;
-import jakarta.persistence.Table;
-import jakarta.persistence.PrePersist;
-import jakarta.persistence.PreUpdate;
+import jakarta.persistence.*;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -21,12 +14,9 @@ import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 
-import java.io.Serializable;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.UUID;
 
 @Entity
 @Table(name = "escolas")
@@ -39,7 +29,7 @@ public class Escola extends PanacheEntity {
 
     @NotBlank(message = "O nome da escola é obrigatório")
     @Size(min = 3, max = 100, message = "O nome deve ter entre 3 e 100 caracteres")
-    @Column(nullable = false)
+    @Column(nullable = false, unique = true) // Nome da escola geralmente é único
     private String nome;
 
     @NotNull(message = "A capacidade é obrigatória")
@@ -71,17 +61,18 @@ public class Escola extends PanacheEntity {
     @Column(name = "data_atualizacao")
     private LocalDateTime dataAtualizacao;
 
-    @OneToMany(mappedBy = "escola", cascade = jakarta.persistence.CascadeType.ALL, orphanRemoval = true)
-    private List<Aluno> alunos = new ArrayList<>();
+    // Removido: @OneToMany(mappedBy = "escola", cascade = jakarta.persistence.CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
+    // private List<Aluno> alunos = new ArrayList<>();
 
     @Nullable
-    @OneToMany(mappedBy = "escola")
-    @JsonIgnore
-    private List<Matricula> matricula;
+    @OneToMany(mappedBy = "escola", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
+    @JsonIgnore // Evitar serialização em loop e expor todas as matrículas por padrão
+    private List<Matricula> matricula; // Relação com Matricula
 
     @PrePersist
     protected void onCreate() {
         dataCriacao = LocalDateTime.now();
+        ativo = true; // Garante que a escola é criada como ativa
     }
 
     @PreUpdate
@@ -89,47 +80,49 @@ public class Escola extends PanacheEntity {
         dataAtualizacao = LocalDateTime.now();
     }
 
-    public int getCapacidade() {
-        return capacidade;
-    }
-
-    public void setCapacidade(int capacidade) {
-        this.capacidade = capacidade;
-    }
-
-    public Escola(String nome, int capacidade, @Nullable List<Matricula> matricula) {
+    public Escola(String nome, int capacidade) {
         this.nome = nome;
         this.capacidade = capacidade;
-        this.matricula = matricula == null ? Collections.emptyList() : matricula;
-        this.dataCriacao = LocalDateTime.now();
+        this.matricula = Collections.emptyList();
     }
 
-    public Escola(String nome, List<Matricula> matricula) {
+
+    public Escola(String nome, int capacidade, @Nullable List<Matricula> matriculas) {
         this.nome = nome;
-        this.matricula = matricula.isEmpty() ? Collections.emptyList() : matricula;
-        this.dataCriacao = LocalDateTime.now();
+        this.capacidade = capacidade;
+        this.matricula = matriculas == null ? Collections.emptyList() : matriculas;
     }
 
-    public Escola(String nome) {
-        this.nome = nome;
-        matricula = Collections.emptyList();
-        this.dataCriacao = LocalDateTime.now();
-    }
 
-    public Object getId() {
-        return this.id;
+
+    // public Object getId() {
+    //    return this.id;
+    // }
+
+    private long getAlunosAtivosCount() {
+        if (this.matricula == null) {
+            return 0;
+        }
+        return this.matricula.stream()
+                .filter(m -> m.getStatus() == Matricula.StatusMatricula.ATIVA)
+                .count();
     }
 
     public boolean temVagasDisponiveis() {
-        return alunos.size() < capacidade;
+        if (this.capacidade == null) return false; // Capacidade não definida
+        return getAlunosAtivosCount() < this.capacidade;
     }
 
     public int getVagasDisponiveis() {
-        return capacidade - alunos.size();
+        if (this.capacidade == null) return 0; // Capacidade não definida
+        return this.capacidade - (int) getAlunosAtivosCount();
     }
 
     public double getPercentualOcupacao() {
-        return (double) alunos.size() / capacidade * 100;
+        if (this.capacidade == null || this.capacidade == 0) {
+            return 0.0; // Evita divisão por zero e lida com capacidade não definida
+        }
+        return (double) getAlunosAtivosCount() / this.capacidade * 100;
     }
 
     public boolean getAtivo() {

@@ -22,17 +22,13 @@ public class IdempotencyInterceptor {
         String idempotencyKey = headers.getHeaderString("Idempotency-Key");
         
         if (idempotencyKey == null || idempotencyKey.isEmpty()) {
-            // Se não houver chave de idempotência, gera uma nova
             idempotencyKey = UUID.randomUUID().toString();
         }
 
         try {
-            // Tenta executar a operação
             Object result = context.proceed();
-            
-            // Se a operação for bem-sucedida, retorna o resultado
-            if (result instanceof Response) {
-                Response response = (Response) result;
+
+            if (result instanceof Response response) {
                 return Response.fromResponse(response)
                     .header("Idempotency-Key", idempotencyKey)
                     .build();
@@ -40,7 +36,6 @@ public class IdempotencyInterceptor {
             
             return result;
         } catch (Exception e) {
-            // Em caso de erro, propaga a exceção
             throw e;
         }
     }

@@ -11,13 +11,14 @@ import org.acme.DTO.InsertEscolaDTO;
 import org.acme.DTO.UpdateEscolaStatusDTO;
 import org.acme.entities.Escola;
 import org.acme.repositories.EscolaRepository;
-import org.acme.repositories.MatriculaRepository;
+import org.acme.repositories.MatriculaRepository; // Importar o repositório de Matrícula
 import org.acme.interceptors.Idempotent;
 import org.acme.exceptions.ApiError;
 
 import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
+import java.time.LocalDateTime; // Importar LocalDateTime
 
 import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.enums.SecuritySchemeIn;
@@ -35,10 +36,10 @@ import org.eclipse.microprofile.openapi.annotations.media.Schema;
 @Consumes(MediaType.APPLICATION_JSON)
 @Tag(name = "Escolas", description = "Gerenciamento de escolas")
 @SecurityScheme(
-    securitySchemeName = "apiKey",
-    type = SecuritySchemeType.APIKEY,
-    apiKeyName = "X-API-Key",
-    in = SecuritySchemeIn.HEADER
+        securitySchemeName = "apiKey",
+        type = SecuritySchemeType.APIKEY,
+        apiKeyName = "X-API-Key",
+        in = SecuritySchemeIn.HEADER
 )
 public class EscolaController {
 
@@ -46,21 +47,21 @@ public class EscolaController {
     EscolaRepository escolaRepository;
 
     @Inject
-    MatriculaRepository matriculaRepository;
+    MatriculaRepository matriculaRepository; // Injetar o repositório de Matrícula
 
     private void logRequest(String endpoint) {
-        Log.info("[" + java.time.LocalDateTime.now() + "] Endpoint acessado: " + endpoint);
+        Log.info("[" + LocalDateTime.now() + "] Endpoint acessado: " + endpoint);
     }
 
     @GET
     @SecurityRequirement(name = "apiKey")
     @Operation(summary = "Lista todas as escolas", description = "Retorna uma lista de todas as escolas cadastradas.")
     @APIResponses(value = {
-        @APIResponse(responseCode = "200", description = "Lista de escolas retornada com sucesso",
-            content = @Content(mediaType = MediaType.APPLICATION_JSON,
-                schema = @Schema(implementation = List.class))),
-        @APIResponse(responseCode = "401", description = "Não autorizado"),
-        @APIResponse(responseCode = "429", description = "Limite de requisições excedido")
+            @APIResponse(responseCode = "200", description = "Lista de escolas retornada com sucesso",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON,
+                            schema = @Schema(implementation = List.class))),
+            @APIResponse(responseCode = "401", description = "Não autorizado"),
+            @APIResponse(responseCode = "429", description = "Limite de requisições excedido")
     })
     public Response getAllEscolas() {
         logRequest("/escolas");
@@ -71,20 +72,21 @@ public class EscolaController {
     @GET
     @Path("/disponiveis")
     @SecurityRequirement(name = "apiKey")
-    @Operation(summary = "Lista escolas com capacidade disponível", description = "Retorna uma lista de escolas que ainda têm vagas disponíveis.")
+    @Operation(summary = "Lista escolas com capacidade disponível", description = "Retorna uma lista de escolas que ainda têm vagas disponíveis com base nas matrículas ativas.")
     @APIResponses(value = {
-        @APIResponse(responseCode = "200", description = "Lista de escolas disponíveis retornada com sucesso",
-            content = @Content(mediaType = MediaType.APPLICATION_JSON,
-                schema = @Schema(implementation = List.class))),
-        @APIResponse(responseCode = "401", description = "Não autorizado"),
-        @APIResponse(responseCode = "429", description = "Limite de requisições excedido")
+            @APIResponse(responseCode = "200", description = "Lista de escolas disponíveis retornada com sucesso",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON,
+                            schema = @Schema(implementation = List.class))),
+            @APIResponse(responseCode = "401", description = "Não autorizado"),
+            @APIResponse(responseCode = "429", description = "Limite de requisições excedido")
     })
     public Response getEscolasComVagas() {
         logRequest("/escolas/disponiveis");
-        List<Escola> escolas = escolaRepository.listAll().stream()
-                .filter(escola -> matriculaRepository.countByEscola(escola) < escola.getCapacidade())
+        List<Escola> escolas = escolaRepository.listAll();
+        List<Escola> escolasDisponiveis = escolas.stream()
+                .filter(escola -> matriculaRepository.count("escola = ?1 and status = 'ATIVA'", escola) < escola.getCapacidade())
                 .toList();
-        return Response.ok(escolas).build();
+        return Response.ok(escolasDisponiveis).build();
     }
 
     @POST
@@ -93,12 +95,12 @@ public class EscolaController {
     @SecurityRequirement(name = "apiKey")
     @Operation(summary = "Adiciona uma escola", description = "Adiciona uma nova escola ao sistema.")
     @APIResponses(value = {
-        @APIResponse(responseCode = "201", description = "Escola criada com sucesso",
-            content = @Content(mediaType = MediaType.APPLICATION_JSON,
-                schema = @Schema(implementation = Escola.class))),
-        @APIResponse(responseCode = "400", description = "Dados inválidos"),
-        @APIResponse(responseCode = "401", description = "Não autorizado"),
-        @APIResponse(responseCode = "429", description = "Limite de requisições excedido")
+            @APIResponse(responseCode = "201", description = "Escola criada com sucesso",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON,
+                            schema = @Schema(implementation = Escola.class))),
+            @APIResponse(responseCode = "400", description = "Dados inválidos"),
+            @APIResponse(responseCode = "401", description = "Não autorizado"),
+            @APIResponse(responseCode = "429", description = "Limite de requisições excedido")
     })
     public Response addEscola(@Valid InsertEscolaDTO dto) {
         logRequest("/escolas");
@@ -110,6 +112,7 @@ public class EscolaController {
         escola.setEmail(dto.getEmail());
         escola.setDiretor(dto.getDiretor());
         escola.setAtivo(dto.getAtivo() != null ? dto.getAtivo() : true);
+        escola.setDataCriacao(LocalDateTime.now()); // Adicionar data de criação
         escolaRepository.persist(escola);
         return Response.status(Response.Status.CREATED).entity(escola).build();
     }
@@ -121,13 +124,13 @@ public class EscolaController {
     @SecurityRequirement(name = "apiKey")
     @Operation(summary = "Atualiza uma escola", description = "Atualiza os dados de uma escola existente.")
     @APIResponses(value = {
-        @APIResponse(responseCode = "200", description = "Escola atualizada com sucesso",
-            content = @Content(mediaType = MediaType.APPLICATION_JSON,
-                schema = @Schema(implementation = Escola.class))),
-        @APIResponse(responseCode = "404", description = "Escola não encontrada"),
-        @APIResponse(responseCode = "400", description = "Dados inválidos"),
-        @APIResponse(responseCode = "401", description = "Não autorizado"),
-        @APIResponse(responseCode = "429", description = "Limite de requisições excedido")
+            @APIResponse(responseCode = "200", description = "Escola atualizada com sucesso",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON,
+                            schema = @Schema(implementation = Escola.class))),
+            @APIResponse(responseCode = "404", description = "Escola não encontrada"),
+            @APIResponse(responseCode = "400", description = "Dados inválidos"),
+            @APIResponse(responseCode = "401", description = "Não autorizado"),
+            @APIResponse(responseCode = "429", description = "Limite de requisições excedido")
     })
     public Response updateEscola(@PathParam("id") Long id, @Valid InsertEscolaDTO dto) {
         logRequest("/escolas/" + id);
@@ -146,6 +149,7 @@ public class EscolaController {
         if (dto.getAtivo() != null) {
             escola.setAtivo(dto.getAtivo());
         }
+        escola.setDataAtualizacao(LocalDateTime.now()); // Atualizar data de atualização
         escolaRepository.persist(escola);
         return Response.ok(escola).build();
     }
@@ -155,12 +159,12 @@ public class EscolaController {
     @Transactional
     @Idempotent
     @SecurityRequirement(name = "apiKey")
-    @Operation(summary = "Remove uma escola", description = "Remove uma escola existente do sistema.")
+    @Operation(summary = "Remove uma escola", description = "Remove uma escola existente do sistema e suas matrículas associadas.")
     @APIResponses(value = {
-        @APIResponse(responseCode = "204", description = "Escola excluída com sucesso"),
-        @APIResponse(responseCode = "404", description = "Escola não encontrada"),
-        @APIResponse(responseCode = "401", description = "Não autorizado"),
-        @APIResponse(responseCode = "429", description = "Limite de requisições excedido")
+            @APIResponse(responseCode = "204", description = "Escola excluída com sucesso"),
+            @APIResponse(responseCode = "404", description = "Escola não encontrada"),
+            @APIResponse(responseCode = "401", description = "Não autorizado"),
+            @APIResponse(responseCode = "429", description = "Limite de requisições excedido")
     })
     public Response deleteEscola(@PathParam("id") Long id) {
         logRequest("/escolas/" + id);
@@ -170,6 +174,8 @@ public class EscolaController {
                     .entity(new ApiError(404, "Not Found", "Escola não encontrada", "/escolas/" + id))
                     .build();
         }
+        // Deletar matrículas associadas antes de deletar a escola
+        matriculaRepository.delete("escola", escola);
         escolaRepository.delete(escola);
         return Response.noContent().build();
     }
@@ -179,10 +185,10 @@ public class EscolaController {
     @SecurityRequirement(name = "apiKey")
     @Operation(summary = "Verifica operações disponíveis", description = "Retorna as operações disponíveis para gerenciar a capacidade da escola.")
     @APIResponses(value = {
-        @APIResponse(responseCode = "200", description = "Operações disponíveis retornadas com sucesso"),
-        @APIResponse(responseCode = "404", description = "Escola não encontrada"),
-        @APIResponse(responseCode = "401", description = "Não autorizado"),
-        @APIResponse(responseCode = "429", description = "Limite de requisições excedido")
+            @APIResponse(responseCode = "200", description = "Operações disponíveis retornadas com sucesso"),
+            @APIResponse(responseCode = "404", description = "Escola não encontrada"),
+            @APIResponse(responseCode = "401", description = "Não autorizado"),
+            @APIResponse(responseCode = "429", description = "Limite de requisições excedido")
     })
     public Response getEscolaCapacidadeOptions(@PathParam("id") Long id) {
         logRequest("/escolas/" + id + "/capacidade");
@@ -191,11 +197,13 @@ public class EscolaController {
             return Response.status(Response.Status.NOT_FOUND).build();
         }
 
+        long alunosMatriculados = matriculaRepository.count("escola = ?1 and status = 'ATIVA'", escola); // Contar matrículas ativas
+
         return Response.ok()
                 .header("Allow", "GET, PATCH, OPTIONS")
                 .header("X-Capacidade-Atual", escola.getCapacidade())
-                .header("X-Alunos-Matriculados", escola.getAlunos().size())
-                .header("X-Vagas-Disponiveis", escola.getCapacidade() - escola.getAlunos().size())
+                .header("X-Alunos-Matriculados", alunosMatriculados)
+                .header("X-Vagas-Disponiveis", escola.getCapacidade() - alunosMatriculados)
                 .build();
     }
 
@@ -204,15 +212,15 @@ public class EscolaController {
     @Transactional
     @Idempotent
     @SecurityRequirement(name = "apiKey")
-    @Operation(summary = "Atualiza capacidade da escola", description = "Atualiza a capacidade máxima de uma escola existente.")
+    @Operation(summary = "Atualiza capacidade da escola", description = "Atualiza a capacidade máxima de uma escola existente. Não permite reduzir a capacidade abaixo do número de alunos matriculados ativos.")
     @APIResponses(value = {
-        @APIResponse(responseCode = "200", description = "Capacidade atualizada com sucesso",
-            content = @Content(mediaType = MediaType.APPLICATION_JSON,
-                schema = @Schema(implementation = Escola.class))),
-        @APIResponse(responseCode = "404", description = "Escola não encontrada"),
-        @APIResponse(responseCode = "400", description = "Dados inválidos"),
-        @APIResponse(responseCode = "401", description = "Não autorizado"),
-        @APIResponse(responseCode = "429", description = "Limite de requisições excedido")
+            @APIResponse(responseCode = "200", description = "Capacidade atualizada com sucesso",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON,
+                            schema = @Schema(implementation = Escola.class))),
+            @APIResponse(responseCode = "404", description = "Escola não encontrada"),
+            @APIResponse(responseCode = "400", description = "Dados inválidos"),
+            @APIResponse(responseCode = "401", description = "Não autorizado"),
+            @APIResponse(responseCode = "429", description = "Limite de requisições excedido")
     })
     public Response atualizarCapacidadeEscola(@PathParam("id") Long id, @QueryParam("novaCapacidade") int novaCapacidade) {
         logRequest("/escolas/" + id + "/capacidade");
@@ -225,7 +233,16 @@ public class EscolaController {
         if (novaCapacidade < 0) {
             return Response.status(Response.Status.BAD_REQUEST).entity("A capacidade deve ser maior ou igual a zero.").build();
         }
+
+        long alunosMatriculados = matriculaRepository.count("escola = ?1 and status = 'ATIVA'", escola);
+        if (novaCapacidade < alunosMatriculados) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity("A nova capacidade (" + novaCapacidade + ") não pode ser menor que o número de alunos ativos matriculados (" + alunosMatriculados + ").")
+                    .build();
+        }
+
         escola.setCapacidade(novaCapacidade);
+        escola.setDataAtualizacao(LocalDateTime.now()); // Atualizar data de atualização
         escolaRepository.persist(escola);
         return Response.ok(escola).build();
     }
@@ -233,14 +250,14 @@ public class EscolaController {
     @GET
     @Path("/{id}/ocupacao")
     @SecurityRequirement(name = "apiKey")
-    @Operation(summary = "Relatório de ocupação", description = "Retorna estatísticas de ocupação da escola.")
+    @Operation(summary = "Relatório de ocupação", description = "Retorna estatísticas de ocupação da escola, considerando apenas matrículas ativas.")
     @APIResponses(value = {
-        @APIResponse(responseCode = "200", description = "Relatório gerado com sucesso",
-            content = @Content(mediaType = MediaType.APPLICATION_JSON,
-                schema = @Schema(implementation = Map.class))),
-        @APIResponse(responseCode = "404", description = "Escola não encontrada"),
-        @APIResponse(responseCode = "401", description = "Não autorizado"),
-        @APIResponse(responseCode = "429", description = "Limite de requisições excedido")
+            @APIResponse(responseCode = "200", description = "Relatório gerado com sucesso",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON,
+                            schema = @Schema(implementation = Map.class))),
+            @APIResponse(responseCode = "404", description = "Escola não encontrada"),
+            @APIResponse(responseCode = "401", description = "Não autorizado"),
+            @APIResponse(responseCode = "429", description = "Limite de requisições excedido")
     })
     public Response getOcupacaoEscola(@PathParam("id") Long id) {
         logRequest("/escolas/" + id + "/ocupacao");
@@ -251,13 +268,20 @@ public class EscolaController {
                     .build();
         }
 
+        long alunosMatriculadosAtivos = matriculaRepository.count("escola = ?1 and status = 'ATIVA'", escola); // Contar matrículas ativas
+
         Map<String, Object> ocupacao = new HashMap<>();
         ocupacao.put("escolaId", escola.id);
         ocupacao.put("escolaNome", escola.getNome());
         ocupacao.put("capacidade", escola.getCapacidade());
-        ocupacao.put("alunosAtivos", escola.getAlunos().size());
-        ocupacao.put("ocupacaoPercentual", (double) escola.getAlunos().size() / escola.getCapacidade() * 100);
-        ocupacao.put("vagasDisponiveis", escola.getCapacidade() - escola.getAlunos().size());
+        ocupacao.put("alunosAtivosMatriculados", alunosMatriculadosAtivos);
+
+        double ocupacaoPercentual = 0.0;
+        if (escola.getCapacidade() > 0) {
+            ocupacaoPercentual = (double) alunosMatriculadosAtivos / escola.getCapacidade() * 100;
+        }
+        ocupacao.put("ocupacaoPercentual", ocupacaoPercentual);
+        ocupacao.put("vagasDisponiveis", escola.getCapacidade() - alunosMatriculadosAtivos);
 
         return Response.ok(ocupacao).build();
     }
@@ -269,13 +293,13 @@ public class EscolaController {
     @SecurityRequirement(name = "apiKey")
     @Operation(summary = "Atualiza o status de uma escola", description = "Atualiza o status (ativo/inativo) de uma escola existente.")
     @APIResponses(value = {
-        @APIResponse(responseCode = "200", description = "Status atualizado com sucesso",
-            content = @Content(mediaType = MediaType.APPLICATION_JSON,
-                schema = @Schema(implementation = Escola.class))),
-        @APIResponse(responseCode = "404", description = "Escola não encontrada"),
-        @APIResponse(responseCode = "400", description = "Dados inválidos"),
-        @APIResponse(responseCode = "401", description = "Não autorizado"),
-        @APIResponse(responseCode = "429", description = "Limite de requisições excedido")
+            @APIResponse(responseCode = "200", description = "Status atualizado com sucesso",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON,
+                            schema = @Schema(implementation = Escola.class))),
+            @APIResponse(responseCode = "404", description = "Escola não encontrada"),
+            @APIResponse(responseCode = "400", description = "Dados inválidos"),
+            @APIResponse(responseCode = "401", description = "Não autorizado"),
+            @APIResponse(responseCode = "429", description = "Limite de requisições excedido")
     })
     public Response updateEscolaStatus(@PathParam("id") Long id, @Valid UpdateEscolaStatusDTO dto) {
         logRequest("/escolas/" + id + "/status");
@@ -286,6 +310,7 @@ public class EscolaController {
                     .build();
         }
         escola.setAtivo(dto.getAtivo());
+        escola.setDataAtualizacao(LocalDateTime.now()); // Atualizar data de atualização
         escolaRepository.persist(escola);
         return Response.ok(escola).build();
     }

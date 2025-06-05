@@ -2,7 +2,6 @@ package org.acme.entities;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import io.quarkus.hibernate.orm.panache.PanacheEntity;
-import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
 import jakarta.annotation.Nullable;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.*;
@@ -15,9 +14,7 @@ import lombok.Builder;
 import java.io.Serializable;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.Collections;
 import java.util.List;
-import java.util.UUID;
 
 @Entity
 @Table(name = "alunos")
@@ -67,18 +64,16 @@ public class Aluno extends PanacheEntity {
     @Column(name = "data_atualizacao")
     private LocalDateTime dataAtualizacao;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "escola_id")
-    private Escola escola;
 
     @Nullable
     @JsonIgnore
-    @OneToMany(mappedBy = "aluno")
-    private List<Matricula> matricula;
+    @OneToMany(mappedBy = "aluno", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
+    private List<Matricula> matricula; // Relação com Matricula
 
     @PrePersist
     protected void onCreate() {
         dataCriacao = LocalDateTime.now();
+        ativo = true; // Garante que o aluno é criado como ativo
     }
 
     @PreUpdate
@@ -86,24 +81,19 @@ public class Aluno extends PanacheEntity {
         dataAtualizacao = LocalDateTime.now();
     }
 
+    // Construtor simplificado
     public Aluno(String nome, Integer idade) {
         this.nome = nome;
         this.idade = idade;
-        this.dataCriacao = LocalDateTime.now();
     }
 
-    public Aluno(String nome, Integer idade, Escola escola) {
-        this.nome = nome;
-        this.idade = idade;
-        this.escola = escola;
-        this.dataCriacao = LocalDateTime.now();
-    }
 
     public boolean getAtivo() {
         return this.ativo;
     }
 
+
     public Serializable getId() {
         return this.id;
-    }
+     }
 }
